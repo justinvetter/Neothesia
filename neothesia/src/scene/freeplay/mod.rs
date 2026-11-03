@@ -168,7 +168,7 @@ impl FreeplayScene {
             .map(|(id, _)| id as u8 + start)
             .collect();
 
-        // Pitch names only (C, C♯, ...), each listed once even when played in several octaves
+        // Pitch names only (C, C#, ...), each listed once even when played in several octaves
         let mut names: Vec<&str> = Vec::new();
         for &n in &notes {
             let name = chords::note_name(n);
@@ -430,7 +430,7 @@ pub(crate) mod chords {
     // TODO: This is clunky, we should change names based on the scale in use
     pub fn note_name(midi: u8) -> &'static str {
         const NAMES: [&str; 12] = [
-            "C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B",
+            "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
         ];
         NAMES[(midi % 12) as usize]
     }
