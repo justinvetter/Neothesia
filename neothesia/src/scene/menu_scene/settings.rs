@@ -6,7 +6,7 @@ use crate::{
     scene::menu_scene::{MsgFn, icons, neo_btn_icon, on_async},
     utils::BoxFuture,
 };
-use neothesia_core::config::NoteNaming;
+use neothesia_core::config::{KEY_COLOR_PALETTE, NoteNaming};
 use nuon::TextAlign;
 use piano_layout::Key;
 
@@ -175,6 +175,89 @@ fn segmented_control(
         }
 
         segment_x += segment_w;
+    }
+
+    clicked
+}
+
+/// Row of clickable color swatches, with an optional leading "Auto" choice.
+/// Returns the clicked choice: `None` for Auto, `Some(i)` for palette color `i`
+fn color_swatches(
+    ui: &mut nuon::Ui,
+    id: &str,
+    row_w: f32,
+    row_h: f32,
+    with_auto: bool,
+    selected: Option<usize>,
+) -> Option<Option<usize>> {
+    let size = 26.0;
+    let gap = 8.0;
+    let auto_w = 58.0;
+
+    let count = KEY_COLOR_PALETTE.len();
+    let mut total_w = count as f32 * size + (count as f32 - 1.0) * gap;
+    if with_auto {
+        total_w += auto_w + gap;
+    }
+
+    let y = nuon::center_y(row_h, size);
+    let mut x = row_w - total_w;
+    let mut clicked = None;
+
+    if with_auto {
+        let is_selected = selected.is_none();
+        let color = if is_selected {
+            [74, 68, 88, 255]
+        } else {
+            [37, 35, 42, 255]
+        };
+        let layout = nuon::TextLayout::new("Auto")
+            .size(14.6)
+            .text_justify(TextAlign::Center)
+            .text_align(TextAlign::Center);
+
+        if nuon::button()
+            .id(format!("{id}-auto"))
+            .pos(x, y)
+            .size(auto_w, size)
+            .color(color)
+            .hover_color([87, 81, 101, 255])
+            .preseed_color([87, 81, 101, 255])
+            .border_radius([6.0; 4])
+            .label_layout(layout)
+            .build(ui)
+        {
+            clicked = Some(None);
+        }
+        x += auto_w + gap;
+    }
+
+    for (i, (_, scheme)) in KEY_COLOR_PALETTE.iter().enumerate() {
+        let (r, g, b) = scheme.base;
+
+        if selected == Some(i) {
+            // Ring around the selected swatch
+            nuon::quad()
+                .pos(x - 3.0, y - 3.0)
+                .size(size + 6.0, size + 6.0)
+                .color([255, 255, 255])
+                .border_radius([9.0; 4])
+                .build(ui);
+        }
+
+        if nuon::button()
+            .id(format!("{id}-{i}"))
+            .pos(x, y)
+            .size(size, size)
+            .color([r, g, b, 255])
+            .hover_color([r, g, b, 200])
+            .preseed_color([r, g, b, 160])
+            .border_radius([6.0; 4])
+            .build(ui)
+        {
+            clicked = Some(Some(i));
+        }
+        x += size + gap;
     }
 
     clicked
@@ -424,6 +507,38 @@ impl super::MenuScene {
                         ) {
                             ctx.config.set_keyboard_note_naming(naming);
                         }
+                    });
+
+                nuon::settings_section("Freeplay")
+                    .width(body_w)
+                    .build(ui, |ui, rows, spacer| {
+                        nuon::settings_row()
+                            .title("Pressed key color")
+                            .subtitle("Color of keys and notes you are playing")
+                            .body(|ui, row_w, row_h| {
+                                let selected = Some(ctx.config.pressed_key_color_id());
+                                if let Some(Some(id)) =
+                                    color_swatches(ui, "pressed-color", row_w, row_h, false, selected)
+                                {
+                                    ctx.config.set_pressed_key_color_id(id);
+                                }
+                            })
+                            .build(ui, rows);
+
+                        spacer(ui);
+
+                        nuon::settings_row()
+                            .title("Sustained key color")
+                            .subtitle("Keys held by the sustain pedal, Auto is a lighter shade")
+                            .body(|ui, row_w, row_h| {
+                                let selected = ctx.config.sustained_key_color_id();
+                                if let Some(id) =
+                                    color_swatches(ui, "sustained-color", row_w, row_h, true, selected)
+                                {
+                                    ctx.config.set_sustained_key_color_id(id);
+                                }
+                            })
+                            .build(ui, rows);
                     });
 
                 // Overlays don't count towards the scroll height, so without this room the

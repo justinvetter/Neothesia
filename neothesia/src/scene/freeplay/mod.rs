@@ -75,7 +75,8 @@ pub struct FreeplayScene {
 impl FreeplayScene {
     pub fn new(ctx: &mut Context, song: Option<Song>) -> Self {
         let mut keyboard = Keyboard::new(ctx, Default::default());
-        keyboard.set_pressed_by_user_colors(ctx.config.color_schema()[0].clone());
+        keyboard.set_pressed_by_user_colors(ctx.config.pressed_key_color());
+        keyboard.set_sustained_colors(ctx.config.sustained_key_color());
 
         let keyboard_layout = keyboard.layout();
 

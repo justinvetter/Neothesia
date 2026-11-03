@@ -210,7 +210,68 @@ pub struct AppearanceConfigV1 {
 
     #[serde(default)]
     pub note_naming: NoteNaming,
+
+    /// Index into [`KEY_COLOR_PALETTE`], color of keys pressed by the user in Freeplay
+    #[serde(default)]
+    pub pressed_key_color: usize,
+
+    /// 0 picks a lighter shade of the pressed color, `n` picks `KEY_COLOR_PALETTE[n - 1]`
+    #[serde(default)]
+    pub sustained_key_color: usize,
 }
+
+/// Colors offered for keys pressed by the user in Freeplay
+pub const KEY_COLOR_PALETTE: [(&str, ColorSchemaV1); 7] = [
+    (
+        "Magenta",
+        ColorSchemaV1 {
+            base: (210, 89, 222),
+            dark: (125, 69, 134),
+        },
+    ),
+    (
+        "Blue",
+        ColorSchemaV1 {
+            base: (93, 188, 255),
+            dark: (48, 124, 255),
+        },
+    ),
+    (
+        "Orange",
+        ColorSchemaV1 {
+            base: (255, 126, 51),
+            dark: (192, 73, 0),
+        },
+    ),
+    (
+        "Green",
+        ColorSchemaV1 {
+            base: (51, 255, 102),
+            dark: (0, 168, 2),
+        },
+    ),
+    (
+        "Pink",
+        ColorSchemaV1 {
+            base: (255, 51, 129),
+            dark: (192, 0, 77),
+        },
+    ),
+    (
+        "Yellow",
+        ColorSchemaV1 {
+            base: (255, 214, 51),
+            dark: (192, 150, 0),
+        },
+    ),
+    (
+        "Teal",
+        ColorSchemaV1 {
+            base: (51, 220, 200),
+            dark: (0, 140, 128),
+        },
+    ),
+];
 
 #[derive(Serialize, Deserialize)]
 pub enum AppearanceConfig {
@@ -227,6 +288,8 @@ impl Default for AppearanceConfig {
             glow: default_glow(),
             chord_identifier: false,
             note_naming: NoteNaming::default(),
+            pressed_key_color: 0,
+            sustained_key_color: 0,
         })
     }
 }

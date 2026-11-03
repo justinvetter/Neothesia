@@ -7,7 +7,7 @@ use model::{
     LayoutConfig, LayoutConfigV1, Model, PcKeyboardConfig, PcKeyboardConfigV1, PlaybackConfig,
     PlaybackConfigV1, SynthConfig, SynthConfigV1, WaterfallConfig, WaterfallConfigV1,
 };
-pub use model::{ColorSchemaV1, NoteNaming};
+pub use model::{ColorSchemaV1, KEY_COLOR_PALETTE, NoteNaming};
 
 fn ron_options() -> ron::Options {
     ron::Options::default()
@@ -222,6 +222,35 @@ impl Config {
 
     pub fn set_color_schema(&mut self, color_schema: Vec<ColorSchemaV1>) {
         self.appearance.color_schema = color_schema;
+    }
+
+    pub fn pressed_key_color_id(&self) -> usize {
+        self.appearance.pressed_key_color.min(KEY_COLOR_PALETTE.len() - 1)
+    }
+
+    pub fn set_pressed_key_color_id(&mut self, id: usize) {
+        self.appearance.pressed_key_color = id.min(KEY_COLOR_PALETTE.len() - 1);
+    }
+
+    pub fn pressed_key_color(&self) -> ColorSchemaV1 {
+        KEY_COLOR_PALETTE[self.pressed_key_color_id()].1.clone()
+    }
+
+    /// `None` means a lighter shade of the pressed color
+    pub fn sustained_key_color_id(&self) -> Option<usize> {
+        self.appearance
+            .sustained_key_color
+            .checked_sub(1)
+            .map(|id| id.min(KEY_COLOR_PALETTE.len() - 1))
+    }
+
+    pub fn set_sustained_key_color_id(&mut self, id: Option<usize>) {
+        self.appearance.sustained_key_color = id.map_or(0, |id| id.min(KEY_COLOR_PALETTE.len() - 1) + 1);
+    }
+
+    pub fn sustained_key_color(&self) -> Option<ColorSchemaV1> {
+        self.sustained_key_color_id()
+            .map(|id| KEY_COLOR_PALETTE[id].1.clone())
     }
 
     pub fn audio_gain(&self) -> f32 {

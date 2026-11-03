@@ -44,6 +44,20 @@ impl KeyState {
         });
     }
 
+    /// Mark a key that was just released as ringing on, in the given color
+    pub fn sustain_by_user_scheme(&mut self, scheme: &ColorSchemaV1) {
+        if self.pressed_by_user.is_none() {
+            return;
+        }
+
+        let (r, g, b) = if self.is_sharp {
+            scheme.dark
+        } else {
+            scheme.base
+        };
+        self.sustained_by_user = Some(Color::from_rgba8(r, g, b, 1.0));
+    }
+
     pub fn clear_sustained_by_user(&mut self) {
         self.sustained_by_user = None;
     }

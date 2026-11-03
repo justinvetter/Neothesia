@@ -14,6 +14,8 @@ pub struct Keyboard {
     song_config: SongConfig,
     pressed_by_user_colors: ColorSchemaV1,
     sustain_down: bool,
+    /// Color of sustained keys, `None` derives a lighter shade of the pressed color
+    sustained_colors: Option<ColorSchemaV1>,
 }
 
 fn get_layout(
@@ -54,6 +56,7 @@ impl Keyboard {
             song_config,
             pressed_by_user_colors: ColorSchemaV1 { base, dark },
             sustain_down: false,
+            sustained_colors: None,
         }
     }
 
@@ -63,6 +66,10 @@ impl Keyboard {
 
     pub fn set_pressed_by_user_colors(&mut self, colors: ColorSchemaV1) {
         self.pressed_by_user_colors = colors;
+    }
+
+    pub fn set_sustained_colors(&mut self, colors: Option<ColorSchemaV1>) {
+        self.sustained_colors = colors;
     }
 
     pub fn renderer(&self) -> &KeyboardRenderer {
@@ -131,7 +138,10 @@ impl Keyboard {
             let key = &mut self.renderer.key_states_mut()[id];
 
             if !is_on && self.sustain_down {
-                key.sustain_by_user();
+                match &self.sustained_colors {
+                    Some(colors) => key.sustain_by_user_scheme(colors),
+                    None => key.sustain_by_user(),
+                }
             }
             key.set_pressed_by_user(is_on, &self.pressed_by_user_colors);
             self.renderer.invalidate_quad_cache();
