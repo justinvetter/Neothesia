@@ -2,7 +2,8 @@ use std::time::Duration;
 
 use midi_file::midly::MidiMessage;
 use neothesia_core::render::{
-    GlowRenderer, GuidelineRenderer, LiveWaterfallRenderer, QuadRenderer, TextRenderer,
+    GlowRenderer, GuidelineRenderer, LiveWaterfallRenderer, QuadRenderer, StaffNote, StaffRenderer,
+    TextRenderer,
 };
 use winit::{
     event::WindowEvent,
@@ -47,6 +48,8 @@ pub struct FreeplayScene {
     quad_renderer_fg: QuadRenderer,
     glow: Option<GlowRenderer>,
     live_waterfall: LiveWaterfallRenderer,
+    staff: StaffRenderer,
+    show_staff: bool,
 
     // TODO: This does not make sens, but get's us going without refactoring
     song: Option<Song>,
@@ -105,6 +108,8 @@ impl FreeplayScene {
             quad_renderer_fg,
             glow,
             live_waterfall,
+            staff: StaffRenderer::new(),
+            show_staff: true,
             song,
             nuon_renderer: NuonRenderer::new(ctx),
             nuon: nuon::Ui::new(),
@@ -147,6 +152,40 @@ impl FreeplayScene {
                 delta,
             );
         }
+    }
+
+    fn update_staff(&mut self, ctx: &Context) {
+        if !self.show_staff {
+            return;
+        }
+
+        let start = self.keyboard.layout().range.start();
+        let notes: Vec<StaffNote> = self
+            .keyboard
+            .key_states()
+            .iter()
+            .enumerate()
+            .filter_map(|(id, state)| {
+                let color = state
+                    .pressed_by_user()
+                    .or_else(|| state.sustained_by_user())?;
+                Some(StaffNote {
+                    midi: id as u8 + start,
+                    color: color.into_linear_rgba(),
+                })
+            })
+            .collect();
+        self.staff.set_notes(&notes);
+
+        let window = ctx.window_state.logical_size;
+        let width = (window.width * 0.6).min(900.0);
+        let height = (window.height * 0.4).min(width * 0.5);
+        let x = (window.width - width) / 2.0;
+        let y = self.keyboard.pos().y - 50.0 - height;
+        self.staff
+            .set_rect((x, y).into(), (width, height).into());
+        self.staff
+            .update(&mut self.quad_renderer_fg, &mut self.text_renderer);
     }
 
     fn update_ui(&mut self, ctx: &mut Context) {
@@ -213,6 +252,7 @@ impl Scene for FreeplayScene {
             .update(&mut self.quad_renderer_fg, &mut self.text_renderer);
 
         self.update_glow(delta);
+        self.update_staff(ctx);
 
         self.live_waterfall.update(
             &ctx.config,
@@ -261,6 +301,10 @@ impl Scene for FreeplayScene {
             ctx.proxy
                 .send_event(NeothesiaEvent::MainMenu(self.song.clone()))
                 .ok();
+        }
+
+        if event.key_released(Key::Named(NamedKey::F2)) {
+            self.show_staff = !self.show_staff;
         }
 
         if event.key_released(Key::Named(NamedKey::Space)) && self.preview.is_some() {

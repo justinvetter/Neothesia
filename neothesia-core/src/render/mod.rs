@@ -5,6 +5,7 @@ mod image;
 mod keyboard;
 mod note_labels;
 mod quad;
+mod staff;
 mod text;
 mod waterfall;
 
@@ -14,6 +15,7 @@ pub use guidelines::GuidelineRenderer;
 pub use image::{Image, ImageIdentifier, ImageRenderer};
 pub use keyboard::{KeyState as KeyboardKeyState, KeyboardRenderer};
 pub use note_labels::NoteLabels;
+pub use staff::{StaffNote, StaffRenderer};
 pub use quad::{QuadInstance, QuadRenderer, QuadRendererFactory};
 pub use text::{TextAlign, TextRenderer, TextRendererFactory, glyphon};
 pub use waterfall::{LiveWaterfallRenderer, WaterfallRenderer};
