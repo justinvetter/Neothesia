@@ -135,6 +135,11 @@ impl StaffRenderer {
         }
     }
 
+    /// Width that fits the clefs, the notes and the caption for a given panel height
+    pub fn width_for_height(height: f32) -> f32 {
+        height / 18.0 * 23.0
+    }
+
     /// Distance between two neighbouring staff lines
     fn space(&self) -> f32 {
         self.size.height / 18.0
@@ -239,8 +244,8 @@ impl StaffRenderer {
             ));
         }
 
-        let caption_x = self.pos.x + self.size.width * 0.72;
-        let caption_right = (self.pos.x + self.size.width - s * 0.5).round() as i32;
+        let caption_x = self.pos.x + s * 10.8;
+        let caption_right = (self.pos.x + self.size.width - s * 0.4).round() as i32;
         let caption_bounds = |y: f32, h: f32| glyphon::TextBounds {
             left: caption_x as i32,
             top: y as i32,
@@ -278,7 +283,7 @@ impl StaffRenderer {
         }
 
         let label_size = s * 1.1;
-        let label_x = note_x + head_w * 2.5;
+        let label_x = note_x + s * 2.2;
         if fold_up > 0 {
             self.text_cache.push(text_area(
                 Self::ottava_label(fold_up, true),
@@ -314,7 +319,7 @@ impl StaffRenderer {
 
     /// Horizontal centre of the notehead column
     fn note_x(&self) -> f32 {
-        self.pos.x + self.size.width * 0.55
+        self.pos.x + self.space() * 7.5
     }
 
     pub fn update(&mut self, quads: &mut QuadRenderer, text: &mut TextRenderer) {

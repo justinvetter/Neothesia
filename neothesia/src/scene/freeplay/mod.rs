@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use midi_file::midly::MidiMessage;
 use neothesia_core::render::{
-    GlowRenderer, GuidelineRenderer, LiveWaterfallRenderer, QuadRenderer, StaffNote, StaffRenderer,
+    GlowRenderer, GuidelineRenderer, LiveWaterfallRenderer, QuadInstance, QuadRenderer, StaffNote, StaffRenderer,
     TextRenderer,
 };
 use winit::{
@@ -23,6 +23,10 @@ use crate::{
 };
 
 mod recorder;
+
+const LABEL_PLATE_WIDTH: f32 = 420.0;
+/// Space above the keyboard taken by the chord line, the note names line and padding
+const LABEL_PLATE_HEIGHT: f32 = 85.0;
 
 type MsgFn = Box<dyn FnOnce(&mut FreeplayScene, &mut Context)>;
 
@@ -184,6 +188,25 @@ impl FreeplayScene {
         };
     }
 
+    /// Dark backing for the note and chord labels, so they stay readable over the glow and waterfall
+    fn update_label_plate(&mut self, ctx: &Context) {
+        if self.note_names.is_empty() {
+            return;
+        }
+
+        let width = LABEL_PLATE_WIDTH;
+        let x = (ctx.window_state.logical_size.width - width) / 2.0;
+        let y = self.keyboard.pos().y - LABEL_PLATE_HEIGHT + 1.0;
+
+        self.quad_renderer_fg.push(QuadInstance {
+            position: [x, y],
+            size: [width, LABEL_PLATE_HEIGHT - 9.0],
+            color: wgpu_jumpstart::Color::new(0.0, 0.0, 0.0, 0.8).into_linear_rgba(),
+            border_radius: [10.0; 4],
+            ..Default::default()
+        });
+    }
+
     fn update_staff(&mut self, ctx: &Context) {
         if !self.show_staff {
             return;
@@ -209,10 +232,10 @@ impl FreeplayScene {
         self.staff.set_caption(&self.chord_name, &self.note_names);
 
         let window = ctx.window_state.logical_size;
-        let width = (window.width * 0.55).min(900.0);
-        let height = (window.height * 0.45).min(width * 0.6);
+        let height = (window.height * 0.4).min(330.0);
+        let width = StaffRenderer::width_for_height(height);
         let x = (window.width - width) / 2.0;
-        let y = self.keyboard.pos().y - 50.0 - height;
+        let y = self.keyboard.pos().y - LABEL_PLATE_HEIGHT - 20.0 - height;
         self.staff
             .set_rect((x, y).into(), (width, height).into());
         self.staff
@@ -296,6 +319,7 @@ impl Scene for FreeplayScene {
 
         self.update_glow(delta);
         self.update_note_labels();
+        self.update_label_plate(ctx);
         self.update_staff(ctx);
 
         self.live_waterfall.update(
