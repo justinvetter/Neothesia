@@ -57,7 +57,8 @@ pub struct FreeplayScene {
     nuon_renderer: NuonRenderer,
     nuon: nuon::Ui,
     mouse_to_midi_state: MouseToMidiEventState,
-    deduced_chord_name: String,
+    note_names: String,
+    chord_name: String,
 
     recorder: FreeplayRecorder,
     recorder_status: RecorderStatus,
@@ -114,7 +115,8 @@ impl FreeplayScene {
             nuon_renderer: NuonRenderer::new(ctx),
             nuon: nuon::Ui::new(),
             mouse_to_midi_state: MouseToMidiEventState::default(),
-            deduced_chord_name: String::new(),
+            note_names: String::new(),
+            chord_name: String::new(),
             recorder: FreeplayRecorder::default(),
             recorder_status: RecorderStatus::default(),
             preview: None,
@@ -154,6 +156,30 @@ impl FreeplayScene {
         }
     }
 
+    /// Names of the keys the user is holding, lowest first, plus the chord they form (if any)
+    fn update_note_labels(&mut self) {
+        let start = self.keyboard.layout().range.start();
+        let notes: Vec<u8> = self
+            .keyboard
+            .key_states()
+            .iter()
+            .enumerate()
+            .filter(|(_, state)| state.pressed_by_user().is_some())
+            .map(|(id, _)| id as u8 + start)
+            .collect();
+
+        self.note_names = notes
+            .iter()
+            .map(|&n| chords::note_name_with_octave(n))
+            .collect::<Vec<_>>()
+            .join(" ");
+        self.chord_name = if notes.len() >= 2 {
+            chords::deduce_name(&notes).unwrap_or_default()
+        } else {
+            String::new()
+        };
+    }
+
     fn update_staff(&mut self, ctx: &Context) {
         if !self.show_staff {
             return;
@@ -176,6 +202,7 @@ impl FreeplayScene {
             })
             .collect();
         self.staff.set_notes(&notes);
+        self.staff.set_caption(&self.chord_name, &self.note_names);
 
         let window = ctx.window_state.logical_size;
         let width = (window.width * 0.55).min(900.0);
@@ -191,8 +218,14 @@ impl FreeplayScene {
     fn update_ui(&mut self, ctx: &mut Context) {
         recorder::update_preview_ui(self, ctx);
 
+        let label = match (self.note_names.is_empty(), self.chord_name.is_empty()) {
+            (true, _) => String::new(),
+            (false, true) => self.note_names.clone(),
+            (false, false) => format!("{}   {}", self.note_names, self.chord_name),
+        };
+
         nuon::label()
-            .text(&self.deduced_chord_name)
+            .text(&label)
             .font_size(25.0)
             .y(self.keyboard.pos().y - 25.0 - 10.0)
             .height(25.0)
@@ -252,6 +285,7 @@ impl Scene for FreeplayScene {
             .update(&mut self.quad_renderer_fg, &mut self.text_renderer);
 
         self.update_glow(delta);
+        self.update_note_labels();
         self.update_staff(ctx);
 
         self.live_waterfall.update(
@@ -337,21 +371,6 @@ impl Scene for FreeplayScene {
         ctx.output_manager
             .connection()
             .midi_event(channel.into(), *message);
-
-        if let MidiMessage::NoteOn { .. } = message {
-            let start = self.keyboard.layout().range.start();
-
-            let notes: Vec<u8> = self
-                .keyboard
-                .key_states()
-                .iter()
-                .enumerate()
-                .filter(|(_, state)| state.pressed_by_user().is_some())
-                .map(|(id, _)| id as u8 + start)
-                .collect();
-
-            self.deduced_chord_name = chords::deduce_name(&notes).unwrap_or_default();
-        }
     }
 }
 
@@ -386,6 +405,11 @@ pub(crate) mod chords {
         }
 
         None
+    }
+
+    /// Note name with octave number, eg. C#4 (middle C is C4)
+    pub fn note_name_with_octave(midi: u8) -> String {
+        format!("{}{}", note_name(midi), midi as i32 / 12 - 1)
     }
 
     // TODO: This is clunky, we should change names based on the scale in use

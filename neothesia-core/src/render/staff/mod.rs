@@ -60,6 +60,8 @@ pub struct StaffRenderer {
     size: Size<f32>,
 
     notes: Vec<StaffNote>,
+    chord_name: String,
+    note_names: String,
     /// Glyphs are static for a given layout, so they are shaped once and reused every frame
     text_cache: Vec<TextArea>,
 }
@@ -102,6 +104,8 @@ impl StaffRenderer {
             pos: Default::default(),
             size: Size::new(0.0, 0.0),
             notes: Vec::new(),
+            chord_name: String::new(),
+            note_names: String::new(),
             text_cache: Vec::new(),
         }
     }
@@ -118,6 +122,15 @@ impl StaffRenderer {
         if self.notes != notes {
             self.notes = notes.to_vec();
             self.notes.sort_by_key(|n| n.midi);
+            self.text_cache.clear();
+        }
+    }
+
+    /// Text shown to the right of the staff: chord name (large) and the names of the notes
+    pub fn set_caption(&mut self, chord_name: &str, note_names: &str) {
+        if self.chord_name != chord_name || self.note_names != note_names {
+            self.chord_name = chord_name.to_string();
+            self.note_names = note_names.to_string();
             self.text_cache.clear();
         }
     }
@@ -186,26 +199,28 @@ impl StaffRenderer {
         let x = self.pos.x + s * 0.8;
         let music = glyphon::Family::Name("Noto Music");
 
-        // The clef glyphs are positioned relative to the line they wrap around:
-        // G clef curls around the G line, F clef sits on the F line
-        let treble_line_y = self.y_of(TREBLE_BOTTOM + 2);
-        let bass_line_y = self.y_of(BASS_BOTTOM + 6);
-        let treble_size = s * 3.4;
-        let bass_size = s * 3.0;
+        // Noto Music draws clefs with one staff space = 0.22 em. Within the glyph, the G clef's
+        // spiral is centred 0.232 em above the baseline and the F clef's dots straddle the point
+        // 0.645 em above it, so the baseline is placed relative to the G and F lines.
+        // cosmic-text puts the baseline 0.9955 em below the top of the text box for this font.
+        let clef_size = s / 0.22;
+        let top_of = |line_y: f32, line_above_baseline: f32| {
+            line_y + line_above_baseline * clef_size - 0.9955 * clef_size
+        };
         self.text_cache.push(text_area(
             "\u{1D11E}",
             music,
-            treble_size,
+            clef_size,
             x,
-            treble_line_y - treble_size * 0.62,
+            top_of(self.y_of(TREBLE_BOTTOM + 2), 0.232),
             ink,
         ));
         self.text_cache.push(text_area(
             "\u{1D122}",
             music,
-            bass_size,
+            clef_size,
             x,
-            bass_line_y - bass_size * 0.5,
+            top_of(self.y_of(BASS_BOTTOM + 6), 0.645),
             ink,
         ));
 
@@ -222,6 +237,44 @@ impl StaffRenderer {
                 self.y_of(p.diatonic) - size * 0.62,
                 ink,
             ));
+        }
+
+        let caption_x = self.pos.x + self.size.width * 0.72;
+        let caption_right = (self.pos.x + self.size.width - s * 0.5).round() as i32;
+        let caption_bounds = |y: f32, h: f32| glyphon::TextBounds {
+            left: caption_x as i32,
+            top: y as i32,
+            right: caption_right,
+            bottom: (y + h) as i32,
+        };
+        let center_y = self.pos.y + self.size.height / 2.0;
+        if !self.chord_name.is_empty() {
+            let size = s * 2.4;
+            let y = center_y - size * 1.1;
+            let mut area = text_area(
+                &self.chord_name,
+                glyphon::Family::SansSerif,
+                size,
+                caption_x,
+                y,
+                ink,
+            );
+            area.bounds = caption_bounds(y, size * 1.2);
+            self.text_cache.push(area);
+        }
+        if !self.note_names.is_empty() {
+            let size = s * 1.5;
+            let y = center_y + size * 0.1;
+            let mut area = text_area(
+                &self.note_names,
+                glyphon::Family::SansSerif,
+                size,
+                caption_x,
+                y,
+                ink,
+            );
+            area.bounds = caption_bounds(y, size * 1.2);
+            self.text_cache.push(area);
         }
 
         let label_size = s * 1.1;
