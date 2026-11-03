@@ -168,11 +168,15 @@ impl FreeplayScene {
             .map(|(id, _)| id as u8 + start)
             .collect();
 
-        self.note_names = notes
-            .iter()
-            .map(|&n| chords::note_name_with_octave(n))
-            .collect::<Vec<_>>()
-            .join(" ");
+        // Pitch names only (C, C♯, ...), each listed once even when played in several octaves
+        let mut names: Vec<&str> = Vec::new();
+        for &n in &notes {
+            let name = chords::note_name(n);
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+        self.note_names = names.join(" ");
         self.chord_name = if notes.len() >= 2 {
             chords::deduce_name(&notes).unwrap_or_default()
         } else {
@@ -218,18 +222,24 @@ impl FreeplayScene {
     fn update_ui(&mut self, ctx: &mut Context) {
         recorder::update_preview_ui(self, ctx);
 
-        let label = match (self.note_names.is_empty(), self.chord_name.is_empty()) {
-            (true, _) => String::new(),
-            (false, true) => self.note_names.clone(),
-            (false, false) => format!("{}   {}", self.note_names, self.chord_name),
-        };
+        let width = ctx.window_state.logical_size.width;
+        let names_y = self.keyboard.pos().y - 25.0 - 10.0;
+
+        // Chord on top, the individual note names right above the keyboard
+        nuon::label()
+            .text(&self.chord_name)
+            .font_size(36.0)
+            .y(names_y - 40.0)
+            .height(36.0)
+            .width(width)
+            .build(&mut self.nuon);
 
         nuon::label()
-            .text(&label)
+            .text(&self.note_names)
             .font_size(25.0)
-            .y(self.keyboard.pos().y - 25.0 - 10.0)
+            .y(names_y)
             .height(25.0)
-            .width(ctx.window_state.logical_size.width)
+            .width(width)
             .build(&mut self.nuon);
     }
 
@@ -394,28 +404,33 @@ pub(crate) mod chords {
             return None;
         }
 
-        // Try each note as potential root
-        for i in 0..normalized.len() {
-            let root = normalized[i];
+        // The lowest note played, so inversions can be written as slash chords (C/E)
+        let bass = midi_notes.iter().copied().min().unwrap_or(0) % 12;
+
+        // Try the bass note as the root first, then every other note
+        let mut candidates = normalized.clone();
+        candidates.sort_by_key(|&n| n != bass);
+
+        for root in candidates {
             let intervals = get_intervals(&normalized, root);
 
             if let Some(chord_type) = match_chord_type(intervals) {
-                return Some(format!("{}{}", note_name(root), chord_type));
+                let mut name = format!("{}{}", note_name(root), chord_type);
+                if bass != root {
+                    name.push('/');
+                    name.push_str(note_name(bass));
+                }
+                return Some(name);
             }
         }
 
         None
     }
 
-    /// Note name with octave number, eg. C#4 (middle C is C4)
-    pub fn note_name_with_octave(midi: u8) -> String {
-        format!("{}{}", note_name(midi), midi as i32 / 12 - 1)
-    }
-
     // TODO: This is clunky, we should change names based on the scale in use
-    fn note_name(midi: u8) -> &'static str {
+    pub fn note_name(midi: u8) -> &'static str {
         const NAMES: [&str; 12] = [
-            "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+            "C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B",
         ];
         NAMES[(midi % 12) as usize]
     }
@@ -434,7 +449,7 @@ pub(crate) mod chords {
         match intervals.as_slice() {
             // Triads
             [3, 7] => Some("m"),   // minor
-            [4, 7] => Some("M"),   // major
+            [4, 7] => Some(""),    // major
             [3, 6] => Some("dim"), // diminished
             [4, 8] => Some("aug"), // augmented
 
@@ -475,8 +490,8 @@ pub(crate) mod chords {
 
         #[test]
         fn test_major_chords() {
-            assert_eq!(deduce_name(&[60, 64, 67]).unwrap(), "CM"); // C major
-            assert_eq!(deduce_name(&[62, 66, 69]).unwrap(), "DM"); // D major
+            assert_eq!(deduce_name(&[60, 64, 67]).unwrap(), "C"); // C major
+            assert_eq!(deduce_name(&[62, 66, 69]).unwrap(), "D"); // D major
         }
 
         #[test]
@@ -501,11 +516,18 @@ pub(crate) mod chords {
         }
 
         #[test]
+        fn test_slash_chords() {
+            assert_eq!(deduce_name(&[64, 67, 72]).unwrap(), "C/E"); // C major, first inversion
+            assert_eq!(deduce_name(&[67, 72, 76]).unwrap(), "C/G"); // C major, second inversion
+            assert_eq!(deduce_name(&[57, 60, 64]).unwrap(), "Am");
+        }
+
+        #[test]
         fn test_edge_cases() {
             assert_eq!(deduce_name(&[]), None);
             assert_eq!(deduce_name(&[60]).unwrap(), "C");
             // Multiple octaves should normalize
-            assert_eq!(deduce_name(&[48, 64, 67, 72]).unwrap(), "CM");
+            assert_eq!(deduce_name(&[48, 64, 67, 72]).unwrap(), "C");
         }
     }
 }
