@@ -32,6 +32,13 @@ const MIDDLE_C: i32 = 28;
 const TOP_LINE: i32 = 40;
 const BOTTOM_LINE: i32 = 16;
 
+/// Notes outside of these are folded back by whole octaves and marked with 8va/8vb
+const TOP_EDGE: i32 = 42;
+const BOTTOM_EDGE: i32 = 14;
+
+/// Extra room (in staff spaces) between the treble and bass staves, so the clefs do not touch
+const STAVE_GAP: f32 = 2.0;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StaffNote {
     pub midi: u8,
@@ -117,36 +124,59 @@ impl StaffRenderer {
 
     /// Distance between two neighbouring staff lines
     fn space(&self) -> f32 {
-        self.size.height / 14.0
+        self.size.height / 18.0
     }
 
     /// Y coordinate of the line (or the centre of a space) at the given diatonic position
     fn y_of(&self, diatonic: i32) -> f32 {
         let s = self.space();
-        self.pos.y + s + (TOP_LINE - diatonic) as f32 * s / 2.0
+        let gap = match diatonic {
+            d if d >= MIDDLE_C + 1 => 0.0,
+            MIDDLE_C => STAVE_GAP / 2.0,
+            _ => STAVE_GAP,
+        };
+        self.pos.y + s + (TOP_EDGE - diatonic) as f32 * s / 2.0 + gap * s
     }
 
-    fn place(&self) -> Vec<Placed> {
+    /// Returns the placed notes, plus how many octaves the highest and lowest notes were folded by
+    fn place(&self) -> (Vec<Placed>, i32, i32) {
         let mut placed: Vec<Placed> = Vec::with_capacity(self.notes.len());
+        let (mut fold_up, mut fold_down) = (0, 0);
 
         for note in &self.notes {
             let (step, sharp) = STEPS[(note.midi % 12) as usize];
             let octave = (note.midi / 12) as i32 - 1;
-            let diatonic = octave * 7 + step as i32;
+            let mut diatonic = octave * 7 + step as i32;
 
-            let shifted = placed
-                .last()
-                .is_some_and(|prev| diatonic - prev.diatonic <= 1 && !prev.shifted);
+            let mut folds = 0;
+            while diatonic > TOP_EDGE {
+                diatonic -= 7;
+                folds += 1;
+            }
+            fold_up = fold_up.max(folds);
+
+            folds = 0;
+            while diatonic < BOTTOM_EDGE {
+                diatonic += 7;
+                folds += 1;
+            }
+            fold_down = fold_down.max(folds);
 
             placed.push(Placed {
                 diatonic,
                 sharp,
                 color: note.color,
-                shifted,
+                shifted: false,
             });
         }
 
-        placed
+        placed.sort_by_key(|p| p.diatonic);
+        for i in 1..placed.len() {
+            placed[i].shifted =
+                placed[i].diatonic - placed[i - 1].diatonic <= 1 && !placed[i - 1].shifted;
+        }
+
+        (placed, fold_up, fold_down)
     }
 
     fn rebuild_text_cache(&mut self) {
@@ -160,37 +190,72 @@ impl StaffRenderer {
         // G clef curls around the G line, F clef sits on the F line
         let treble_line_y = self.y_of(TREBLE_BOTTOM + 2);
         let bass_line_y = self.y_of(BASS_BOTTOM + 6);
-        let clef_size = s * 4.6;
+        let treble_size = s * 3.4;
+        let bass_size = s * 3.0;
         self.text_cache.push(text_area(
             "\u{1D11E}",
             music,
-            clef_size,
+            treble_size,
             x,
-            treble_line_y - clef_size * 0.62,
+            treble_line_y - treble_size * 0.62,
             ink,
         ));
         self.text_cache.push(text_area(
             "\u{1D122}",
             music,
-            clef_size,
+            bass_size,
             x,
-            bass_line_y - clef_size * 0.5,
+            bass_line_y - bass_size * 0.5,
             ink,
         ));
 
         let note_x = self.note_x();
         let head_w = s * 1.3;
-        for p in self.place().iter().filter(|p| p.sharp) {
+        let (placed, fold_up, fold_down) = self.place();
+        for p in placed.iter().filter(|p| p.sharp) {
             let size = s * 2.2;
-            let shift = if p.shifted { head_w * 0.95 } else { 0.0 };
             self.text_cache.push(text_area(
                 "\u{266F}",
                 glyphon::Family::SansSerif,
                 size,
-                note_x + shift - head_w * 0.5 - size * 0.5,
+                note_x - head_w * 0.5 - size * 0.5,
                 self.y_of(p.diatonic) - size * 0.62,
                 ink,
             ));
+        }
+
+        let label_size = s * 1.1;
+        let label_x = note_x + head_w * 2.5;
+        if fold_up > 0 {
+            self.text_cache.push(text_area(
+                Self::ottava_label(fold_up, true),
+                glyphon::Family::SansSerif,
+                label_size,
+                label_x,
+                self.pos.y + s * 0.1,
+                ink,
+            ));
+        }
+        if fold_down > 0 {
+            self.text_cache.push(text_area(
+                Self::ottava_label(fold_down, false),
+                glyphon::Family::SansSerif,
+                label_size,
+                label_x,
+                self.pos.y + self.size.height - s * 1.5,
+                ink,
+            ));
+        }
+    }
+
+    fn ottava_label(folds: i32, up: bool) -> &'static str {
+        match (folds, up) {
+            (1, true) => "8va",
+            (2, true) => "15ma",
+            (_, true) => "22ma",
+            (1, false) => "8vb",
+            (2, false) => "15mb",
+            (_, false) => "22mb",
         }
     }
 
@@ -244,7 +309,7 @@ impl StaffRenderer {
         let head_h = s * 0.95;
         let ledger_w = head_w * 1.9;
 
-        for p in self.place() {
+        for p in self.place().0 {
             let d = p.diatonic;
             let cx = note_x + if p.shifted { head_w * 0.95 } else { 0.0 };
 

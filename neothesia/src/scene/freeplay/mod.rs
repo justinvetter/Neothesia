@@ -178,8 +178,8 @@ impl FreeplayScene {
         self.staff.set_notes(&notes);
 
         let window = ctx.window_state.logical_size;
-        let width = (window.width * 0.6).min(900.0);
-        let height = (window.height * 0.4).min(width * 0.5);
+        let width = (window.width * 0.55).min(900.0);
+        let height = (window.height * 0.45).min(width * 0.6);
         let x = (window.width - width) / 2.0;
         let y = self.keyboard.pos().y - 50.0 - height;
         self.staff
