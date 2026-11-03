@@ -46,6 +46,10 @@ impl LiveWaterfallRenderer {
             .set_speed(&self.queue, -config.animation_speed().abs());
     }
 
+    pub fn set_color_override(&mut self, color: Option<crate::config::ColorSchemaV1>) {
+        self.renderer.set_color_override(color);
+    }
+
     pub fn note_on(&mut self, channel: u8, key: u8, velocity: u8) {
         self.note_off(key);
         self.active.insert(

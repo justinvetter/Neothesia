@@ -1,6 +1,9 @@
 use std::rc::Rc;
 
-use crate::{TransformUniform, Uniform, config::Config};
+use crate::{
+    TransformUniform, Uniform,
+    config::{ColorSchemaV1, Config},
+};
 use midi_file::{MidiNote, MidiTrack};
 use wgpu_jumpstart::{Color, Gpu};
 
@@ -37,6 +40,8 @@ impl NoteList {
 pub struct WaterfallRenderer {
     notes_pipeline: WaterfallPipeline,
     notes: NoteList,
+    /// Draws every note in this color instead of the per-track config colors
+    color_override: Option<ColorSchemaV1>,
     device: wgpu::Device,
     queue: wgpu::Queue,
 }
@@ -56,6 +61,7 @@ impl WaterfallRenderer {
         let mut notes = Self {
             notes_pipeline,
             notes,
+            color_override: None,
             device: gpu.device.clone(),
             queue: gpu.queue.clone(),
         };
@@ -64,6 +70,10 @@ impl WaterfallRenderer {
             .set_speed(&gpu.queue, config.animation_speed());
         notes.resize(config, layout);
         notes
+    }
+
+    pub fn set_color_override(&mut self, color: Option<ColorSchemaV1>) {
+        self.color_override = color;
     }
 
     pub fn pipeline(&mut self) -> &mut WaterfallPipeline {
@@ -98,7 +108,10 @@ impl WaterfallRenderer {
 
                 let color_schema = config.color_schema();
 
-                let color = &color_schema[note.track_color_id % color_schema.len()];
+                let color = self
+                    .color_override
+                    .as_ref()
+                    .unwrap_or(&color_schema[note.track_color_id % color_schema.len()]);
                 let color = if key.kind().is_sharp() {
                     color.dark
                 } else {

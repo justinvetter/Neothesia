@@ -99,12 +99,14 @@ impl FreeplayScene {
             keyboard.layout(),
         ));
 
-        let live_waterfall = LiveWaterfallRenderer::new(
+        let mut live_waterfall = LiveWaterfallRenderer::new(
             &ctx.gpu,
             &ctx.config,
             &ctx.transform,
             keyboard.layout().clone(),
         );
+
+        live_waterfall.set_color_override(Some(ctx.config.pressed_key_color()));
 
         Self {
             keyboard,
