@@ -11,6 +11,8 @@ pub struct KeyState {
 
     pressed_by_file: Option<Color>,
     pressed_by_user: Option<Color>,
+    /// Released by the user, but still ringing because the sustain pedal is down
+    sustained_by_user: Option<Color>,
 }
 
 impl KeyState {
@@ -20,11 +22,30 @@ impl KeyState {
 
             pressed_by_file: None,
             pressed_by_user: None,
+            sustained_by_user: None,
         }
     }
 
     pub fn pressed_by_user(&self) -> Option<&Color> {
         self.pressed_by_user.as_ref()
+    }
+
+    pub fn sustained_by_user(&self) -> Option<&Color> {
+        self.sustained_by_user.as_ref()
+    }
+
+    /// Mark a key that was just released as ringing on, using a lighter shade of its pressed color
+    pub fn sustain_by_user(&mut self) {
+        self.sustained_by_user = self.pressed_by_user.map(|c| Color {
+            r: c.r + (1.0 - c.r) * 0.6,
+            g: c.g + (1.0 - c.g) * 0.6,
+            b: c.b + (1.0 - c.b) * 0.6,
+            a: c.a,
+        });
+    }
+
+    pub fn clear_sustained_by_user(&mut self) {
+        self.sustained_by_user = None;
     }
 
     pub fn pressed_by_file(&self) -> Option<&Color> {
@@ -39,6 +60,8 @@ impl KeyState {
         };
 
         if is {
+            // A re-struck key is fully pressed again, not sustained
+            self.sustained_by_user = None;
             self.pressed_by_user = Some(Color::from_rgba8(r, g, b, 1.0));
         } else {
             self.pressed_by_user = None;
@@ -61,6 +84,8 @@ impl KeyState {
 
     pub fn color(&self) -> Color {
         if let Some(color) = self.pressed_by_user {
+            color
+        } else if let Some(color) = self.sustained_by_user {
             color
         } else if let Some(color) = self.pressed_by_file {
             color

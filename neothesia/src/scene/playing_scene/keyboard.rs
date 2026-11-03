@@ -13,6 +13,7 @@ pub struct Keyboard {
     renderer: KeyboardRenderer,
     song_config: SongConfig,
     pressed_by_user_colors: ColorSchemaV1,
+    sustain_down: bool,
 }
 
 fn get_layout(
@@ -52,6 +53,7 @@ impl Keyboard {
             renderer,
             song_config,
             pressed_by_user_colors: ColorSchemaV1 { base, dark },
+            sustain_down: false,
         }
     }
 
@@ -115,8 +117,12 @@ impl Keyboard {
         let range_start = self.range().start() as usize;
 
         let (is_on, key) = match message {
-            MidiMessage::NoteOn { key, .. } => (true, key.as_int()),
+            MidiMessage::NoteOn { key, vel } => (vel.as_int() > 0, key.as_int()),
             MidiMessage::NoteOff { key, .. } => (false, key.as_int()),
+            MidiMessage::Controller { controller, value } if controller.as_int() == 64 => {
+                self.set_sustain(value.as_int() >= 64);
+                return;
+            }
             _ => return,
         };
 
@@ -124,9 +130,22 @@ impl Keyboard {
             let id = key as usize - range_start;
             let key = &mut self.renderer.key_states_mut()[id];
 
+            if !is_on && self.sustain_down {
+                key.sustain_by_user();
+            }
             key.set_pressed_by_user(is_on, &self.pressed_by_user_colors);
             self.renderer.invalidate_quad_cache();
         }
+    }
+
+    fn set_sustain(&mut self, down: bool) {
+        self.sustain_down = down;
+        if !down {
+            for key in self.renderer.key_states_mut() {
+                key.clear_sustained_by_user();
+            }
+        }
+        self.renderer.invalidate_quad_cache();
     }
 
     pub fn file_midi_events(&mut self, config: &Config, events: &[&midi_file::MidiEvent]) {
